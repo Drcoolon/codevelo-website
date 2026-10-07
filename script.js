@@ -43,50 +43,23 @@ const chatbot = document.querySelector("[data-chatbot]");
 const chatbotTrigger = document.querySelector("[data-chatbot-trigger]");
 const chatbotPanel = document.querySelector("[data-chatbot-panel]");
 const chatbotClose = document.querySelector("[data-chatbot-close]");
-let chatbotTonePending = false;
-let chatbotAudioContext;
+const chatbotSound = document.querySelector("[data-chatbot-sound]");
+chatbotSound.volume = 0.25;
+chatbotSound.load();
 
-const getChatbotAudioContext = () => {
-  const AudioContext = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContext) throw new Error("Web Audio is not supported");
-  if (!chatbotAudioContext) chatbotAudioContext = new AudioContext();
-  return chatbotAudioContext;
-};
-
-const playChatbotTone = async () => {
-  const context = getChatbotAudioContext();
-  if (context.state === "suspended") {
-    await context.resume();
+const playChatbotSound = () => {
+  chatbotSound.currentTime = 0;
+  const playback = chatbotSound.play();
+  if (playback) {
+    playback.catch((error) => {
+      console.warn("The chatbot click sound could not be played.", error);
+    });
   }
-  if (context.state !== "running") {
-    throw new Error("Audio playback is unavailable");
-  }
-
-  const now = context.currentTime;
-  const notes = [
-    { frequency: 880, start: 0, duration: 0.16 },
-    { frequency: 1174.66, start: 0.1, duration: 0.2 }
-  ];
-
-  notes.forEach(({ frequency, start, duration }) => {
-    const oscillator = context.createOscillator();
-    const gain = context.createGain();
-    oscillator.type = "sine";
-    oscillator.frequency.value = frequency;
-    gain.gain.setValueAtTime(0.0001, now + start);
-    gain.gain.exponentialRampToValueAtTime(1, now + start + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + start + duration);
-    oscillator.connect(gain);
-    gain.connect(context.destination);
-    oscillator.start(now + start);
-    oscillator.stop(now + start + duration);
-  });
 };
 
 const openChatbot = () => {
   chatbotPanel.hidden = false;
   chatbotTrigger.setAttribute("aria-expanded", "true");
-  chatbotTrigger.classList.remove("is-noticed");
 };
 
 const closeChatbot = () => {
@@ -94,33 +67,7 @@ const closeChatbot = () => {
   chatbotTrigger.setAttribute("aria-expanded", "false");
 };
 
-const showChatbotInvite = () => {
-  chatbotTrigger.classList.add("is-noticed");
-  chatbotTonePending = true;
-  playChatbotTone()
-    .then(() => {
-      chatbotTonePending = false;
-    })
-    .catch(() => {});
-};
-
-window.setTimeout(showChatbotInvite, 2000);
+chatbotTrigger.addEventListener("pointerdown", playChatbotSound);
 chatbotTrigger.addEventListener("click", openChatbot);
 chatbotClose.addEventListener("click", closeChatbot);
 chatbot.querySelector("[data-chatbot-contact]").addEventListener("click", closeChatbot);
-
-document.addEventListener("pointerdown", () => {
-  if (!chatbotAudioContext) {
-    try {
-      getChatbotAudioContext().resume();
-    } catch {
-      return;
-    }
-  }
-  if (!chatbotTonePending) return;
-  playChatbotTone()
-    .then(() => {
-      chatbotTonePending = false;
-    })
-    .catch(() => {});
-});
