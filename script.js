@@ -44,16 +44,24 @@ const chatbotTrigger = document.querySelector("[data-chatbot-trigger]");
 const chatbotPanel = document.querySelector("[data-chatbot-panel]");
 const chatbotClose = document.querySelector("[data-chatbot-close]");
 let chatbotTonePending = false;
+let chatbotAudioContext;
 
-const playChatbotTone = () => {
+const getChatbotAudioContext = () => {
   const AudioContext = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContext) return;
+  if (!AudioContext) throw new Error("Web Audio is not supported");
+  if (!chatbotAudioContext) chatbotAudioContext = new AudioContext();
+  return chatbotAudioContext;
+};
 
-  const context = new AudioContext();
+const playChatbotTone = async () => {
+  const context = getChatbotAudioContext();
   if (context.state === "suspended") {
-    context.close();
-    throw new Error("Audio playback requires a user gesture");
+    await context.resume();
   }
+  if (context.state !== "running") {
+    throw new Error("Audio playback is unavailable");
+  }
+
   const now = context.currentTime;
   const notes = [
     { frequency: 880, start: 0, duration: 0.16 },
@@ -66,15 +74,13 @@ const playChatbotTone = () => {
     oscillator.type = "sine";
     oscillator.frequency.value = frequency;
     gain.gain.setValueAtTime(0.0001, now + start);
-    gain.gain.exponentialRampToValueAtTime(0.08, now + start + 0.02);
+    gain.gain.exponentialRampToValueAtTime(1, now + start + 0.02);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + start + duration);
     oscillator.connect(gain);
     gain.connect(context.destination);
     oscillator.start(now + start);
     oscillator.stop(now + start + duration);
   });
-
-  window.setTimeout(() => context.close(), 700);
 };
 
 const openChatbot = () => {
@@ -90,24 +96,31 @@ const closeChatbot = () => {
 
 const showChatbotInvite = () => {
   chatbotTrigger.classList.add("is-noticed");
-  try {
-    playChatbotTone();
-  } catch {
-    chatbotTonePending = true;
-  }
+  chatbotTonePending = true;
+  playChatbotTone()
+    .then(() => {
+      chatbotTonePending = false;
+    })
+    .catch(() => {});
 };
 
-window.setTimeout(showChatbotInvite, 8000);
+window.setTimeout(showChatbotInvite, 2000);
 chatbotTrigger.addEventListener("click", openChatbot);
 chatbotClose.addEventListener("click", closeChatbot);
 chatbot.querySelector("[data-chatbot-contact]").addEventListener("click", closeChatbot);
 
 document.addEventListener("pointerdown", () => {
-  if (!chatbotTonePending) return;
-  chatbotTonePending = false;
-  try {
-    playChatbotTone();
-  } catch {
-    chatbotTonePending = true;
+  if (!chatbotAudioContext) {
+    try {
+      getChatbotAudioContext().resume();
+    } catch {
+      return;
+    }
   }
-}, { once: true });
+  if (!chatbotTonePending) return;
+  playChatbotTone()
+    .then(() => {
+      chatbotTonePending = false;
+    })
+    .catch(() => {});
+});
